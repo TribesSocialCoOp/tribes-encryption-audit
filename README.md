@@ -24,7 +24,7 @@ Instead of asking you to take our word for it, we:
 
 **Result: 30 attacks, 0 plaintext recovered.**
 
-Read the full writeup: [We Red-Teamed Our Own Encryption](https://dev.to/dualityenigma/we-red-teamed-our-own-encryption-heres-the-raw-output)
+Read the full writeup: **We Red-Teamed Our Own Encryption** *(link will be added once published)*
 
 ---
 
