@@ -1,0 +1,173 @@
+# Tribes.app Encryption Audit
+
+**Red-team attack test and source code for the Tribes.app client-side encryption layer.**
+
+This repository contains:
+
+1. **The attack script** — connects to a PostgreSQL database with full read access and runs 30+ attack vectors against real encrypted posts, attempting to recover plaintext without any private keys.
+2. **The encryption source code** — the actual production files that implement E2E encryption in Tribes.app.
+
+This is not the full Tribes.app codebase. It's the subset that matters for verifying our encryption claims.
+
+---
+
+## Why This Exists
+
+Tribes.app uses client-side E2E encryption for private tribes, journal posts, and bond messages. We claim that our servers store only ciphertext and cannot read your private data.
+
+Instead of asking you to take our word for it, we:
+
+1. Posted known plaintext through the real app UI
+2. Gave ourselves full database access
+3. Tried every attack we could think of to recover the plaintext
+4. Published the script and the results
+
+**Result: 30 attacks, 0 plaintext recovered.**
+
+Read the full writeup: [We Red-Teamed Our Own Encryption](https://dev.to/dualityenigma/we-red-teamed-our-own-encryption-heres-the-raw-output)
+
+---
+
+## Repository Structure
+
+```
+├── attack-test.ts          # The red-team attack script
+├── src/
+│   ├── tribe-encryption.ts   # AES-256-GCM group key encryption (private tribes)
+│   ├── journal-encryption.ts # AES-256-GCM personal key encryption (journal)
+│   ├── post-encryption.ts    # Sender-key model for pairwise bond encryption
+│   ├── identity-keys.ts      # RSA-OAEP 4096-bit key wrapping (tribe key distribution)
+│   ├── encoding.ts           # Base64 encoding helpers
+│   └── prf-vault.ts          # PRF-based key vault encryption (passkey + hardware auth)
+└── README.md
+```
+
+---
+
+## Encryption Architecture
+
+### Three Encryption Models
+
+| Model | Context | Algorithm | Key Storage |
+|-------|---------|-----------|-------------|
+| **Personal** | Journal entries | AES-256-GCM (per-user symmetric key) | IndexedDB |
+| **Pairwise** | Bond messages (Inner Circle, My People) | ECDH P-256 → HKDF → AES-256-GCM | IndexedDB |
+| **Group** | Private tribe posts | AES-256-GCM (shared symmetric key, RSA-OAEP wrapped distribution) | IndexedDB |
+
+### What the Server Stores
+
+- ✅ Ciphertext (opaque binary blobs)
+- ✅ IVs (random, unique per post)
+- ✅ RSA-wrapped tribe key copies (useless without recipient's RSA private key)
+- ✅ ECDH public keys (useless without the corresponding private key)
+
+### What the Server Does NOT Store
+
+- ❌ Any plaintext post content
+- ❌ Any raw symmetric keys
+- ❌ Any RSA or ECDH private keys
+- ❌ Any vault passphrases
+
+---
+
+## Running the Attack Script
+
+### Prerequisites
+
+- Node.js 20+
+- A PostgreSQL database with encrypted posts (e.g., a Tribes.app DEV environment)
+
+### Setup
+
+```bash
+npm install pg
+```
+
+### Run
+
+```bash
+# Set your database connection string
+export DATABASE_URL="postgresql://user:pass@localhost:5432/tribes"
+
+# Run the attack
+npx tsx attack-test.ts
+```
+
+### Expected Output
+
+```
+╔═══════════════════════════════════════════════════╗
+║  TRIBES.APP ENCRYPTION EMPIRICAL ATTACK TEST      ║
+║  Threat model: Full DB access, NO private keys    ║
+║  Data: Real posts from browser E2E flow           ║
+╚═══════════════════════════════════════════════════╝
+
+═══ PHASE 2: RUNNING ATTACK VECTORS ════════════
+
+  🔒 SECURE | Plaintext in content column → Only placeholder "🔒 Encrypted post" — no leak
+  🔒 SECURE | Known plaintext in ciphertext → "ALPHA-BRAVO-7749" NOT found — properly encrypted
+  🔒 SECURE | 1000 random AES-256 keys → All 1000 keys rejected by GCM auth tag
+  ...
+
+═══════════════════════════════════════════════════
+  RESULTS SUMMARY
+═══════════════════════════════════════════════════
+
+  Total attacks:  30
+  🔒 Held:        30
+  🔓 Broken:      0
+
+  ✅ ALL ATTACKS FAILED.
+```
+
+---
+
+## Attack Vectors Covered
+
+1. Plaintext leakage in DB text columns
+2. Ciphertext entropy / randomness analysis
+3. Ciphertext-as-text readability test
+4. Known plaintext byte search (8 identifiable phrases)
+5. IV uniqueness and length validation
+6. 1,000 random AES-256 key brute force attempts
+7. GCM authentication tag tampering
+8. Cross-post XOR ciphertext correlation
+9. Tribe key unwrap with wrong RSA-4096 key
+10. RSA public key factorization feasibility
+11. RSA public key as decryption key (one-way trapdoor test)
+12. Vault backup PBKDF2 brute force estimation
+13. Full SQL `ILIKE` text search for known plaintext
+
+---
+
+## Browser Encryption: Honest Threat Model
+
+We are transparent about what browser-based encryption does and does not protect against:
+
+### ✅ Protects Against
+
+- **Database breach** — ciphertext only, no plaintext recoverable
+- **Malicious server operator** — server never sees keys or plaintext
+- **Bulk surveillance** — encrypted data is computationally infeasible to decrypt at scale
+- **Data subpoena** — we can only hand over ciphertext we can't read
+
+### ⚠️ Does NOT Protect Against
+
+- **Compromised device** — physical access to the device with an active session
+- **Malicious browser extension** — an extension with broad permissions can read page data (mitigated by PRF Vault encrypting keys at rest)
+- **Browser zero-day** — a remote code execution vulnerability in the browser engine
+- **Malicious code push** — if we shipped JavaScript that exfiltrated keys (mitigated by future reproducible builds)
+
+These limitations apply equally to Signal Desktop, ProtonMail, 1Password in the browser, and every other application that performs cryptography in the browser environment.
+
+---
+
+## License
+
+The encryption source code in `src/` is provided for audit and verification purposes only. It is not licensed for redistribution or use in other projects without written permission from Tribes.app.
+
+The attack script (`attack-test.ts`) is released under the MIT License. Use it to test your own encryption.
+
+---
+
+*Questions? Open an issue or reach out at security@tribes.app.*
