@@ -157,19 +157,37 @@ We are transparent about what browser-based encryption does and does not protect
 ### ⚠️ Does NOT Protect Against
 
 - **Compromised device** — physical access to the device with an active session
-- **Malicious browser extension** — an extension with broad permissions can read page data (mitigated by PRF Vault encrypting keys at rest)
-- **Browser zero-day** — a remote code execution vulnerability in the browser engine
-- **Malicious code push** — if we shipped JavaScript that exfiltrated keys (mitigated by future reproducible builds)
+- **Malicious browser extension** - an extension with broad permissions can read page data (mitigated by PRF Vault encrypting keys at rest)
+- **Browser zero-day** - a remote code execution vulnerability in the browser engine
+- **Malicious code push** - if we shipped JavaScript that exfiltrated keys (mitigated by source hash verification below)
 
 These limitations apply equally to Signal Desktop, ProtonMail, 1Password in the browser, and every other application that performs cryptography in the browser environment.
 
 ---
 
+## Verifying Deployed Code
+
+Every production deploy automatically hashes the crypto source files and publishes the result to [`crypto-integrity.json`](crypto-integrity.json) in this repo.
+
+### Verify source file integrity
+
+```bash
+# 1. Get the published hashes
+curl -s https://raw.githubusercontent.com/TribesSocialCoOp/tribes-encryption-audit/main/crypto-integrity.json
+
+# 2. Hash any source file in this repo and compare
+shasum -a 256 src/tribe-encryption.ts
+```
+
+The source files in this repo are identical to the ones used in production builds. If the hashes match, the code running on tribes.app is the code you see here.
+
+---
+
 ## License
 
-The encryption source code in `src/` is provided for audit and verification purposes only. It is not licensed for redistribution or use in other projects without written permission from Tribes.app.
+MIT License. See [LICENSE](LICENSE) for details.
 
-The attack script (`attack-test.ts`) is released under the MIT License. Use it to test your own encryption.
+This is the actual production encryption code from Tribes.app, open-sourced for transparency and independent verification.
 
 ---
 

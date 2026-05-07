@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Tribes Social Co-Op. MIT License.
+// https://github.com/TribesSocialCoOp/tribes-encryption-audit
+
 /**
  * @fileoverview Client-side identity key management (RSA-OAEP).
  * Used exclusively for distributing tribe group keys to members.

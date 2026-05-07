@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Tribes Social Co-Op. MIT License.
+// https://github.com/TribesSocialCoOp/tribes-encryption-audit
+
 /**
  * 🔴 EMPIRICAL ENCRYPTION ATTACK TEST
  * 

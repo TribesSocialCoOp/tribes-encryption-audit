@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Tribes Social Co-Op. MIT License.
+// https://github.com/TribesSocialCoOp/tribes-encryption-audit
+
 /**
  * @fileoverview Client-side tribe group key encryption primitives.
  * Phase 3: Group Encryption for private tribes.

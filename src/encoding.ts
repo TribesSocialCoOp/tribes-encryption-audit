@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Tribes Social Co-Op. MIT License.
+// https://github.com/TribesSocialCoOp/tribes-encryption-audit
+
 /**
  * Safe base64 encoding/decoding for ArrayBuffers.
  *

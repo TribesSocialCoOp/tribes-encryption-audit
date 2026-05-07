@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Tribes Social Co-Op. MIT License.
+// https://github.com/TribesSocialCoOp/tribes-encryption-audit
+
 /**
  * @fileoverview Passkey PRF-based vault recovery.
  * Phase 3: Hardware-backed multi-device key sync.
