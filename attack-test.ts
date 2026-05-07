@@ -15,7 +15,7 @@ import { Pool } from 'pg';
 import { webcrypto } from 'crypto';
 
 const subtle = webcrypto.subtle;
-const DATABASE_URL = 'postgresql://tribes:tribes_dev@127.0.0.1:5432/tribes';
+const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://tribes:tribes_dev@127.0.0.1:5432/tribes';
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 // ── Result Tracking ──────────────────────────────────────────

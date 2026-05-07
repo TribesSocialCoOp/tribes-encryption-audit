@@ -31,7 +31,8 @@ Read the full writeup: **We Red-Teamed Our Own Encryption** *(link will be added
 ## Repository Structure
 
 ```
-├── attack-test.ts          # The red-team attack script
+├── attack-test.ts            # The red-team attack script (30 attack vectors)
+├── schema-and-seed.sql       # Schema + real encrypted blobs (extracted from our dev DB)
 ├── src/
 │   ├── tribe-encryption.ts   # AES-256-GCM group key encryption (private tribes)
 │   ├── journal-encryption.ts # AES-256-GCM personal key encryption (journal)
@@ -72,26 +73,28 @@ Read the full writeup: **We Red-Teamed Our Own Encryption** *(link will be added
 
 ## Running the Attack Script
 
+You don't need the Tribes app. You just need PostgreSQL and Node.
+
 ### Prerequisites
 
 - Node.js 20+
-- A PostgreSQL database with encrypted posts (e.g., a Tribes.app DEV environment)
+- PostgreSQL (local or Docker)
 
 ### Setup
 
 ```bash
+# 1. Create a test database and load the schema + real encrypted blobs
+createdb tribes_audit
+psql tribes_audit < schema-and-seed.sql
+
+# 2. Install the pg driver
 npm install pg
+
+# 3. Run the attack
+DATABASE_URL="postgresql://localhost/tribes_audit" npx tsx attack-test.ts
 ```
 
-### Run
-
-```bash
-# Set your database connection string
-export DATABASE_URL="postgresql://user:pass@localhost:5432/tribes"
-
-# Run the attack
-npx tsx attack-test.ts
-```
+The seed file contains the actual database schema extracted from our dev environment and three real AES-256-GCM encrypted posts created through the browser UI. The original plaintext is listed in the comments. Try to recover it.
 
 ### Expected Output
 
