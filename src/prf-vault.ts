@@ -25,6 +25,8 @@ import {
   getAllBondKeys,
   getBondKey,
   storeBondKey,
+  deleteSharedSecret,
+  hashPublicKeyJwk,
 } from './key-store';
 
 // ============================================================
@@ -141,6 +143,10 @@ interface VaultEntry {
 interface VaultPayload {
   version: number;
   entries: VaultEntry[];
+  identityKey?: {
+    privateKeyJwk: JsonWebKey;
+    publicKeyJwk: JsonWebKey;
+  };
   exportedAt: number;
 }
 
@@ -148,7 +154,10 @@ interface VaultPayload {
  * Encrypts the local keystore into a vault blob using a PRF wrapping key.
  * Exports all bond keys and the personal journal key.
  */
-export async function encryptVaultWithPrf(wrappingKey: CryptoKey): Promise<ArrayBuffer> {
+export async function encryptVaultWithPrf(
+  wrappingKey: CryptoKey,
+  userId?: string,
+): Promise<ArrayBuffer> {
   const storedKeys = await getAllBondKeys();
   if (storedKeys.length === 0) throw new Error('No keys to backup');
 
@@ -176,6 +185,24 @@ export async function encryptVaultWithPrf(wrappingKey: CryptoKey): Promise<Array
     exportedAt: Date.now(),
   };
 
+  // Include identity key if available (matches vault-backup.ts v2 format)
+  if (userId) {
+    try {
+      const { getIdentityKey } = await import('./key-store');
+      const { exportIdentityPrivateKey, exportIdentityPublicKey } = await import('./identity-keys');
+      const identityEntry = await getIdentityKey(userId);
+      if (identityEntry) {
+        const pubKey = await (await import('./identity-keys')).importIdentityPublicKey(identityEntry.publicKeyJwk);
+        payload.identityKey = {
+          privateKeyJwk: await exportIdentityPrivateKey(identityEntry.privateKey),
+          publicKeyJwk: await exportIdentityPublicKey(pubKey),
+        };
+      }
+    } catch (err) {
+      console.warn('[prf-vault] Could not include identity key in backup:', err);
+    }
+  }
+
   const plaintext = new TextEncoder().encode(JSON.stringify(payload));
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
@@ -198,8 +225,9 @@ export async function encryptVaultWithPrf(wrappingKey: CryptoKey): Promise<Array
  */
 export async function decryptAndRestoreVault(
   wrappingKey: CryptoKey,
-  encryptedVault: ArrayBuffer
-): Promise<void> {
+  encryptedVault: ArrayBuffer,
+  userId?: string,
+): Promise<{ imported: number; skipped: number; total: number }> {
   const packed = new Uint8Array(encryptedVault);
   if (packed.length < 12) throw new Error('Invalid vault blob');
 
@@ -217,20 +245,60 @@ export async function decryptAndRestoreVault(
     throw new Error(`Unsupported vault version: ${payload.version}`);
   }
 
+  // Smart merge: same semantics as password vault restore.
+  // - New bonds: import directly
+  // - Same public key: skip (already in sync)
+  // - Different public key: backup wins + invalidate shared secret cache
+  let imported = 0;
+  let skipped = 0;
+
   for (const entry of payload.entries) {
     try {
-      // MERGE: Skip keys that already exist locally to avoid clobbering
-      // device-specific bonds that aren't in this backup.
       const existingKey = await getBondKey(entry.bondId);
+
       if (existingKey) {
-        console.debug(`[prf-vault] Skipping bond ${entry.bondId.substring(0, 16)}... — local key exists`);
-        continue;
+        // Compare public key hashes to detect key pair changes
+        const localPubHash = await hashPublicKeyJwk(existingKey.publicKeyJwk);
+        const backupPubHash = await hashPublicKeyJwk(entry.publicKeyJwk);
+
+        if (localPubHash === backupPubHash) {
+          skipped++;
+          continue;
+        }
+
+        // Different key pair — backup wins. Invalidate shared secret.
+        console.debug(`[prf-vault] Updating bond ${entry.bondId.substring(0, 16)}... — key pair changed, invalidating shared secret`);
+        await deleteSharedSecret(entry.bondId);
       }
 
       const key = await importPrivateKey(entry.privateKeyJwk);
       await storeBondKey(entry.bondId, key, entry.publicKeyJwk);
+      imported++;
     } catch (err) {
       console.error(`[prf-vault] Failed to restore key for ${entry.bondId}`, err);
     }
   }
+
+  // Restore identity key if present (skip-if-exists, same as password vault)
+  if (payload.identityKey && userId) {
+    try {
+      const { importIdentityPrivateKey } = await import('./identity-keys');
+      const { storeIdentityKey, getIdentityKey } = await import('./key-store');
+
+      const existingIdentity = await getIdentityKey(userId);
+      if (!existingIdentity) {
+        const privateKey = await importIdentityPrivateKey(payload.identityKey.privateKeyJwk);
+        await storeIdentityKey(userId, privateKey, payload.identityKey.publicKeyJwk);
+        console.log(`[prf-vault] Restored identity key for user ${userId.substring(0, 8)}...`);
+      } else {
+        console.debug(`[prf-vault] Skipping identity key — local key exists for ${userId.substring(0, 8)}...`);
+      }
+    } catch (err) {
+      console.warn('[prf-vault] Failed to restore identity key:', err);
+    }
+  }
+
+  console.log(`[prf-vault] Restore complete: ${imported} imported, ${skipped} unchanged, ${payload.entries.length} total`);
+
+  return { imported, skipped, total: payload.entries.length };
 }

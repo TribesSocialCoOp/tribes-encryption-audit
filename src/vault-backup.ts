@@ -22,9 +22,7 @@
  */
 
 import {
-  generateExportableBondKeyPair,
   exportPrivateKey,
-  exportPublicKey,
   importPrivateKey,
 } from './key-manager';
 import {
@@ -32,7 +30,6 @@ import {
   getBondKey,
   storeBondKey,
   deleteSharedSecret,
-  type StoredBondKey,
 } from './key-store';
 
 // ============================================================
@@ -112,7 +109,7 @@ async function deriveKeyFromPassphrase(
  *
  * This is a two-step process:
  * 1. Collect all keys from IndexedDB and export private keys to JWK
- * 2. Encrypt the entire collection with the passphrase-derived key
+ * 2. Encrypt the entire collection with the password-derived key
  *
  * NOTE: Bond keys must have been generated with `extractable: true` for this
  * to work. For non-extractable keys, a re-generation flow is needed (Phase 2D).
@@ -123,8 +120,8 @@ export async function createVaultBackup(
   passphrase: string,
   identityKey?: { privateKey: CryptoKey; publicKey: CryptoKey },
 ): Promise<{ encryptedVault: ArrayBuffer; salt: string }> {
-  if (!passphrase || passphrase.length < 8) {
-    throw new Error('Recovery passphrase must be at least 8 characters');
+  if (!passphrase || passphrase.length < 12) {
+    throw new Error('Recovery passphrase must be at least 12 characters');
   }
 
   // Collect all stored bond keys
@@ -157,7 +154,7 @@ export async function createVaultBackup(
 
   // MERGE: Union local keys with any existing server backup so we never
   // lose keys from other devices. The existing backup is decrypted using
-  // the same passphrase; if that fails (passphrase changed), we fall back
+  // the same password; if that fails (password changed), we fall back
   // to local-only keys and log a warning.
   entries = await mergeWithExistingBackup(entries, passphrase);
 
@@ -206,7 +203,7 @@ export async function createVaultBackup(
  * This ensures that keys from other devices are preserved when backing up.
  * Local keys take precedence (they're the freshest on this device).
  *
- * Falls back to local-only entries if decryption fails (e.g. passphrase changed).
+ * Falls back to local-only entries if decryption fails (e.g. password changed).
  */
 async function mergeWithExistingBackup(
   localEntries: VaultEntry[],
@@ -248,7 +245,7 @@ async function mergeWithExistingBackup(
 
     return [...localEntries, ...serverOnlyEntries];
   } catch (err) {
-    // Decryption failure = passphrase changed or corrupted backup.
+    // Decryption failure = password changed or corrupted backup.
     // Fall back to local-only — don't block the backup.
     console.warn('[vault] Could not merge with existing backup (passphrase mismatch or no backup):', err);
     return localEntries;
@@ -301,7 +298,7 @@ export async function restoreVaultBackup(
     salt.match(/.{2}/g)!.map(byte => parseInt(byte, 16)),
   );
 
-  // Derive the same key from passphrase + salt
+  // Derive the same key from password + salt
   const key = await deriveKeyFromPassphrase(passphrase, saltBytes);
 
   // Unpack: [12 bytes IV][ciphertext]
@@ -408,8 +405,8 @@ export function validatePassphrase(passphrase: string): {
 } {
   const errors: string[] = [];
 
-  if (passphrase.length < 8) {
-    errors.push('Passphrase must be at least 8 characters');
+  if (passphrase.length < 12) {
+    errors.push('Passphrase must be at least 12 characters');
   }
   if (passphrase.length > 128) {
     errors.push('Passphrase must be at most 128 characters');
@@ -417,8 +414,8 @@ export function validatePassphrase(passphrase: string): {
   if (!/[A-Z]/.test(passphrase)) {
     errors.push('Passphrase should contain at least one uppercase letter');
   }
-  if (!/[0-9]/.test(passphrase)) {
-    errors.push('Passphrase should contain at least one number');
+  if (!/[0-9]/.test(passphrase) && !/[^A-Za-z0-9]/.test(passphrase)) {
+    errors.push('Passphrase should contain at least one number or symbol');
   }
 
   return {

@@ -1,6 +1,6 @@
 {
-  "buildId": "97f806a-1778286060",
-  "timestamp": "2026-05-09T00:25:10Z",
+  "buildId": "97f806a-1778355360",
+  "timestamp": "2026-05-09T19:40:10Z",
   "sources": {
     "encoding.ts": "21cdfa0c5b9b5a23d5ae868170ee884d1be198fc7e2b7b3293f6e6868f874f37",
     "file-encryption.ts": "5be39dc743f305b447b70251a9b0460931a081c94840cd32f751350c01d49056",
@@ -11,8 +11,9 @@
     "key-store.ts": "69f14aff46c7a68e50dea1271466790ea93638572814872e52452ad9b2b5c56f",
     "passkey-lifecycle.ts": "663d13eeaf89ae8f91b0d0cbee097741f6d1616315b638eaefdf355c0eba29b7",
     "post-encryption.ts": "c50f3d9351a4926ee280a9427a8060ddd63d57426f7128a7f2420c5bbc67e19a",
-    "prf-vault.ts": "eecb1da4ca04417f3f4c5b24ccb00bac66057ecfddf2d3612636f5f08d730d2a",
+    "prf-vault.ts": "c51027834a2341927990b60ed8bb2daf903efe7540a433d30955c2ba3cbb2078",
+    "prf-webauthn-helpers.ts": "d482d8d382fb657e34c68e132a0f4ad1a69a2e89801b0e257cd8bd8f14c8f0da",
     "tribe-encryption.ts": "199af3cd01daf9a713ca6f400f4bf4c5069dc0d5d959dfbb5b6cd386dc065461",
-    "vault-backup.ts": "e236e6f31d9f500f82d02f67d70eff7ec6f2d5e47a38c10d364fdf2e829188c5"
+    "vault-backup.ts": "c47a2ba936e2edf05747fd2cc09d49dcfb229f81db15165b59f1431e56e5a8a0"
   }
 }
