@@ -1,6 +1,6 @@
 {
-  "buildId": "97f806a-1778357408",
-  "timestamp": "2026-05-09T20:14:19Z",
+  "buildId": "97f806a-1778357770",
+  "timestamp": "2026-05-09T20:20:22Z",
   "sources": {
     "encoding.ts": "21cdfa0c5b9b5a23d5ae868170ee884d1be198fc7e2b7b3293f6e6868f874f37",
     "file-encryption.ts": "5be39dc743f305b447b70251a9b0460931a081c94840cd32f751350c01d49056",
@@ -8,7 +8,7 @@
     "index.ts": "69e23e04b94e5b94751347be9f055a6d05f39b2cdff1be919d5b2c10d82bd77a",
     "journal-encryption.ts": "7d3e0fdfa3cf2115fbe907d46d46a730339e0f92ef2869e27559d3a678d97c89",
     "key-manager.ts": "9a0bb55792abeff571cace0549e2a7eaa4b1fb9feb0d0ead3e9dd52d6a5c1d25",
-    "key-store.ts": "69f14aff46c7a68e50dea1271466790ea93638572814872e52452ad9b2b5c56f",
+    "key-store.ts": "b3f378e36dbf73b92a66c8816ad7d32460f2ba8923bafa4bce04770ed6b812d8",
     "passkey-lifecycle.ts": "663d13eeaf89ae8f91b0d0cbee097741f6d1616315b638eaefdf355c0eba29b7",
     "post-encryption.ts": "c50f3d9351a4926ee280a9427a8060ddd63d57426f7128a7f2420c5bbc67e19a",
     "prf-vault.ts": "0e3f392914dbfcd82e3b513f861814d148d9c1039379f7941323240126d4d50f",

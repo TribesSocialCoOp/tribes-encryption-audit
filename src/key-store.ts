@@ -301,9 +301,18 @@ export async function hasAnyKeys(): Promise<boolean> {
 /**
  * Computes a SHA-256 hex hash of a JWK for change detection.
  * Used to detect when a peer has rotated their public key.
+ *
+ * NOTE: JWK properties are sorted before serialization to ensure deterministic
+ * hashes. Without this, the same key round-tripped through JSON.stringify/parse
+ * (e.g., stored on the server) could produce different property orderings and
+ * cause false-positive mismatch detections.
  */
 export async function hashPublicKeyJwk(jwk: JsonWebKey): Promise<string> {
-  const encoded = new TextEncoder().encode(JSON.stringify(jwk));
+  const sorted = Object.keys(jwk).sort().reduce((acc, key) => {
+    acc[key] = (jwk as Record<string, unknown>)[key];
+    return acc;
+  }, {} as Record<string, unknown>);
+  const encoded = new TextEncoder().encode(JSON.stringify(sorted));
   const hash = await crypto.subtle.digest('SHA-256', encoded);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
