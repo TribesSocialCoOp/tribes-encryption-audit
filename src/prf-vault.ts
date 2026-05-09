@@ -53,7 +53,10 @@ const HKDF_INFO = 'tribes.app/prf-vault-wrapping-key/v1';
  *    is validated at ceremony time anyway.
  */
 export async function isPrfSupported(): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.PublicKeyCredential) return false;
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+    console.log('[prf] No window or PublicKeyCredential');
+    return false;
+  }
   
   // 1. Check getClientCapabilities (Standard way, WebAuthn L3)
   // This API is new and not yet in all TypeScript lib definitions — use safe dynamic access.
@@ -61,17 +64,23 @@ export async function isPrfSupported(): Promise<boolean> {
   if (typeof pkc.getClientCapabilities === 'function') {
     try {
       const caps = await (pkc.getClientCapabilities as () => Promise<Record<string, boolean>>)();
+      console.log('[prf] getClientCapabilities:', caps);
       return !!caps.prf;
-    } catch {
+    } catch (err) {
+      console.log('[prf] getClientCapabilities threw:', err);
       // Fall through — capability check failed (e.g., browser throws on unknown caps)
     }
+  } else {
+    console.log('[prf] getClientCapabilities not available');
   }
 
   // 2. Native iOS (Capacitor): PRF works via the system authenticator.
   // The login flow already successfully evaluates PRF extensions through
   // @simplewebauthn/browser → ASAuthorizationController, so we know it's available.
   const cap = (window as unknown as Record<string, any>).Capacitor;
+  console.log('[prf] Capacitor global:', !!cap, 'isNative:', cap?.isNativePlatform?.(), 'platform:', cap?.getPlatform?.());
   if (cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios') {
+    console.log('[prf] Capacitor iOS detected — returning true');
     return true;
   }
 
@@ -84,13 +93,18 @@ export async function isPrfSupported(): Promise<boolean> {
   if (typeof pkc.isConditionalMediationAvailable === 'function') {
     try {
       const hasCM = await (pkc.isConditionalMediationAvailable as () => Promise<boolean>)();
+      console.log('[prf] isConditionalMediationAvailable:', hasCM);
       if (hasCM) return true;
-    } catch {
+    } catch (err) {
+      console.log('[prf] isConditionalMediationAvailable threw:', err);
       // Fall through
     }
+  } else {
+    console.log('[prf] isConditionalMediationAvailable not available');
   }
 
   // 4. Unknown capability — not supported.
+  console.log('[prf] No detection method succeeded — returning false');
   return false;
 }
 
