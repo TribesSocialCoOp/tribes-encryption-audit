@@ -346,11 +346,16 @@ export async function restoreVaultBackup(
           continue;
         }
 
-        // Different key pair — backup wins (it came from the device that
-        // published this key to the server, so peers are already using it).
-        // Invalidate the shared secret cache so key-sync re-derives.
-        console.debug(`[vault] Updating bond ${entry.bondId.substring(0, 16)}... — key pair changed, invalidating shared secret`);
-        await deleteSharedSecret(entry.bondId);
+        // Different key pair — LOCAL WINS. This device generated its own key
+        // and published it to the server. The backup contains a key from a
+        // different device/session. Overwriting would cause a mismatch between
+        // this device's IndexedDB and the server's public key record.
+        console.warn(
+          `[vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
+          `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
+        );
+        skipped++;
+        continue;
       }
 
       const privateKey = await importPrivateKey(entry.privateKeyJwk);

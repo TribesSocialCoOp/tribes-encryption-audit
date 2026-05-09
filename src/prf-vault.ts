@@ -310,9 +310,15 @@ export async function decryptAndRestoreVault(
           continue;
         }
 
-        // Different key pair — backup wins. Invalidate shared secret.
-        console.debug(`[prf-vault] Updating bond ${entry.bondId.substring(0, 16)}... — key pair changed, invalidating shared secret`);
-        await deleteSharedSecret(entry.bondId);
+        // Different key pair — LOCAL WINS. This device generated its own key
+        // and published it to the server. The backup's key is from a different
+        // device. Overwriting would create a mismatch with the server record.
+        console.warn(
+          `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
+          `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
+        );
+        skipped++;
+        continue;
       }
 
       const key = await importPrivateKey(entry.privateKeyJwk);
