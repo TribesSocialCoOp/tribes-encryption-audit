@@ -42,7 +42,15 @@ const HKDF_INFO = 'tribes.app/prf-vault-wrapping-key/v1';
 // ============================================================
 
 /**
- * Checks if the browser supports the WebAuthn PRF extension.
+ * Checks if the browser/platform supports the WebAuthn PRF extension.
+ *
+ * Detection strategy:
+ * 1. Standard: PublicKeyCredential.getClientCapabilities() (WebAuthn L3)
+ * 2. Native iOS (Capacitor): PRF is supported via the system authenticator
+ *    (iCloud Keychain / Face ID). The login flow already uses this successfully.
+ * 3. Fallback: If navigator.credentials is available and we're on a platform
+ *    known to support passkeys, assume PRF is available — the actual PRF result
+ *    is validated at ceremony time anyway.
  */
 export async function isPrfSupported(): Promise<boolean> {
   if (typeof window === 'undefined' || !window.PublicKeyCredential) return false;
@@ -59,8 +67,30 @@ export async function isPrfSupported(): Promise<boolean> {
     }
   }
 
-  // 2. Conservative fallback: unknown capability = not supported.
-  // The actual PRF result is confirmed by the authenticator at runtime, not here.
+  // 2. Native iOS (Capacitor): PRF works via the system authenticator.
+  // The login flow already successfully evaluates PRF extensions through
+  // @simplewebauthn/browser → ASAuthorizationController, so we know it's available.
+  const cap = (window as unknown as Record<string, any>).Capacitor;
+  if (cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios') {
+    return true;
+  }
+
+  // 3. Web fallback: check if we're on a modern platform with credentials support.
+  // Safari 18+, Chrome 128+, and other modern browsers support PRF — but without
+  // getClientCapabilities we can't be 100% sure. We optimistically return true
+  // if the platform has PublicKeyCredential + conditional mediation support
+  // (a proxy for "modern enough for PRF"). The actual PRF result is validated
+  // at ceremony time and we handle failures gracefully.
+  if (typeof pkc.isConditionalMediationAvailable === 'function') {
+    try {
+      const hasCM = await (pkc.isConditionalMediationAvailable as () => Promise<boolean>)();
+      if (hasCM) return true;
+    } catch {
+      // Fall through
+    }
+  }
+
+  // 4. Unknown capability — not supported.
   return false;
 }
 
