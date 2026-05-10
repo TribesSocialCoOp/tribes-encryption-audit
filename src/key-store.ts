@@ -31,11 +31,13 @@ export interface StoredBondKey {
 }
 
 export interface CachedSharedSecret {
+  storeKey: string;    // Composite: `${bondId}_${peerKeyHash}`
   bondId: string;
   sharedSecret: CryptoKey; // Non-extractable AES-256-GCM key
   derivedAt: number; // timestamp ms
-  peerKeyHash: string; // SHA-256 hex of peer's public JWK — detect rotations
-  localKeyHash: string; // SHA-256 hex of OUR public JWK — detect local key regeneration
+  peerKeyHash: string; // SHA-256 hex of peer's public JWK
+  localKeyHash: string; // SHA-256 hex of OUR public JWK
+  isCurrent: boolean;  // true if this is the active key for new messages
 }
 
 export interface StoredTribeKey {
@@ -57,7 +59,7 @@ export interface StoredIdentityKey {
 // ============================================================
 
 const DB_NAME = 'tribes_keystore';
-const DB_VERSION = 3; // Bumped 1→2 for shared_secrets, 2→3 for identity_keys
+const DB_VERSION = 4; // 1: bond_keys, 2: shared_secrets, 3: identity_keys, 4: multi-version shared_secrets
 const BOND_KEYS_STORE = 'bond_keys';
 const SHARED_SECRETS_STORE = 'shared_secrets';
 const TRIBE_KEYS_STORE = 'tribe_keys';
@@ -76,6 +78,7 @@ function openDatabase(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const oldVersion = event.oldVersion;
 
       // V1: bond_keys store
       if (!db.objectStoreNames.contains(BOND_KEYS_STORE)) {
@@ -83,8 +86,13 @@ function openDatabase(): Promise<IDBDatabase> {
       }
 
       // V2: shared_secrets store (pre-derived ECDH shared secrets)
+      // V4: Recreation with composite keyPath
+      if (oldVersion < 4 && db.objectStoreNames.contains(SHARED_SECRETS_STORE)) {
+        db.deleteObjectStore(SHARED_SECRETS_STORE);
+      }
       if (!db.objectStoreNames.contains(SHARED_SECRETS_STORE)) {
-        db.createObjectStore(SHARED_SECRETS_STORE, { keyPath: 'bondId' });
+        const store = db.createObjectStore(SHARED_SECRETS_STORE, { keyPath: 'storeKey' });
+        store.createIndex('bondId', 'bondId', { unique: false });
       }
 
       // V2: tribe_keys store (group symmetric keys)
@@ -326,6 +334,7 @@ export async function storeSharedSecret(
   sharedSecret: CryptoKey,
   peerKeyHash: string,
   localKeyHash: string = '',
+  isCurrent: boolean = true,
 ): Promise<void> {
   const db = await openDatabase();
 
@@ -333,25 +342,78 @@ export async function storeSharedSecret(
     const tx = db.transaction(SHARED_SECRETS_STORE, 'readwrite');
     const store = tx.objectStore(SHARED_SECRETS_STORE);
 
-    const entry: CachedSharedSecret = {
-      bondId,
-      sharedSecret,
-      derivedAt: Date.now(),
-      peerKeyHash,
-      localKeyHash,
+    // If inserting as current, first demote any existing current entries for this bond
+    if (isCurrent) {
+      const index = store.index('bondId');
+      const cursorReq = index.openCursor(IDBKeyRange.only(bondId));
+      cursorReq.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor) {
+          const existing = cursor.value as CachedSharedSecret;
+          if (existing.isCurrent && existing.storeKey !== `${bondId}_${peerKeyHash}`) {
+            existing.isCurrent = false;
+            cursor.update(existing);
+          }
+          cursor.continue();
+        } else {
+          // Cursor exhausted — now insert the new entry
+          putEntry();
+        }
+      };
+      cursorReq.onerror = () => reject(new Error(`Failed to demote old secrets for bond ${bondId}`));
+    } else {
+      putEntry();
+    }
+
+    function putEntry() {
+      const entry: CachedSharedSecret = {
+        storeKey: `${bondId}_${peerKeyHash}`,
+        bondId,
+        sharedSecret,
+        derivedAt: Date.now(),
+        peerKeyHash,
+        localKeyHash,
+        isCurrent,
+      };
+
+      const request = store.put(entry);
+      request.onerror = () => reject(new Error(`Failed to cache shared secret for bond ${bondId}`));
+      // resolve via tx.oncomplete
+    }
+
+    tx.oncomplete = () => { db.close(); resolve(); };
+  });
+}
+
+/**
+ * Marks an existing shared secret as no longer current.
+ * Used when a peer rotates their key.
+ */
+export async function markSharedSecretHistorical(bondId: string, peerKeyHash: string): Promise<void> {
+  const db = await openDatabase();
+  const storeKey = `${bondId}_${peerKeyHash}`;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SHARED_SECRETS_STORE, 'readwrite');
+    const store = tx.objectStore(SHARED_SECRETS_STORE);
+
+    const getReq = store.get(storeKey);
+    getReq.onsuccess = () => {
+      const entry = getReq.result as CachedSharedSecret;
+      if (entry) {
+        entry.isCurrent = false;
+        store.put(entry);
+      }
+      resolve();
     };
-
-    const request = store.put(entry);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error(`Failed to cache shared secret for bond ${bondId}`));
-
+    getReq.onerror = () => reject(new Error(`Failed to mark historical: ${storeKey}`));
     tx.oncomplete = () => db.close();
   });
 }
 
 /**
- * Retrieves a cached shared secret for a bond.
- * Returns null if no secret is cached (peer key not yet available or key rotated).
+ * Retrieves the CURRENT cached shared secret for a bond.
+ * Returns null if no current secret is cached.
  */
 export async function getSharedSecret(bondId: string): Promise<CachedSharedSecret | null> {
   const db = await openDatabase();
@@ -359,10 +421,76 @@ export async function getSharedSecret(bondId: string): Promise<CachedSharedSecre
   return new Promise((resolve, reject) => {
     const tx = db.transaction(SHARED_SECRETS_STORE, 'readonly');
     const store = tx.objectStore(SHARED_SECRETS_STORE);
-    const request = store.get(bondId);
+    const index = store.index('bondId');
+    const request = index.openCursor(IDBKeyRange.only(bondId));
 
-    request.onsuccess = () => resolve(request.result ?? null);
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        const entry = cursor.value as CachedSharedSecret;
+        if (entry.isCurrent) {
+          resolve(entry);
+          return;
+        }
+        cursor.continue();
+      } else {
+        resolve(null);
+      }
+    };
     request.onerror = () => reject(new Error(`Failed to get shared secret for bond ${bondId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Retrieves all HISTORICAL (non-current) shared secrets for a bond.
+ */
+export async function getHistoricalSharedSecrets(bondId: string): Promise<CachedSharedSecret[]> {
+  const db = await openDatabase();
+  const results: CachedSharedSecret[] = [];
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SHARED_SECRETS_STORE, 'readonly');
+    const store = tx.objectStore(SHARED_SECRETS_STORE);
+    const index = store.index('bondId');
+    const request = index.openCursor(IDBKeyRange.only(bondId));
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        const entry = cursor.value as CachedSharedSecret;
+        if (!entry.isCurrent) {
+          results.push(entry);
+        }
+        cursor.continue();
+      } else {
+        resolve(results.sort((a, b) => b.derivedAt - a.derivedAt));
+      }
+    };
+    request.onerror = () => reject(new Error(`Failed to get historical secrets for bond ${bondId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Retrieves all shared secrets for a bond (current and historical).
+ */
+export async function getAllSharedSecretsForBond(bondId: string): Promise<CachedSharedSecret[]> {
+  const db = await openDatabase();
+  const results: CachedSharedSecret[] = [];
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SHARED_SECRETS_STORE, 'readonly');
+    const store = tx.objectStore(SHARED_SECRETS_STORE);
+    const index = store.index('bondId');
+    const request = index.getAll(IDBKeyRange.only(bondId));
+
+    request.onsuccess = () => {
+      resolve((request.result as CachedSharedSecret[]).sort((a, b) => b.derivedAt - a.derivedAt));
+    };
+    request.onerror = () => reject(new Error(`Failed to list secrets for bond ${bondId}`));
 
     tx.oncomplete = () => db.close();
   });
@@ -388,8 +516,10 @@ export async function getAllSharedSecrets(): Promise<CachedSharedSecret[]> {
 }
 
 /**
- * Deletes a cached shared secret for a bond.
- * Called when a bond is revoked or a peer key rotates.
+ * Deletes ALL cached shared secrets for a bond (current and historical).
+ * Called when a bond is revoked or keys are being regenerated from scratch.
+ *
+ * Uses the bondId index since the store's keyPath is the composite 'storeKey'.
  */
 export async function deleteSharedSecret(bondId: string): Promise<void> {
   const db = await openDatabase();
@@ -397,12 +527,20 @@ export async function deleteSharedSecret(bondId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(SHARED_SECRETS_STORE, 'readwrite');
     const store = tx.objectStore(SHARED_SECRETS_STORE);
-    const request = store.delete(bondId);
+    const index = store.index('bondId');
+    const request = index.openCursor(IDBKeyRange.only(bondId));
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error(`Failed to delete shared secret for bond ${bondId}`));
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      }
+      // resolve is handled by tx.oncomplete
+    };
+    request.onerror = () => reject(new Error(`Failed to delete shared secrets for bond ${bondId}`));
 
-    tx.oncomplete = () => db.close();
+    tx.oncomplete = () => { db.close(); resolve(); };
   });
 }
 

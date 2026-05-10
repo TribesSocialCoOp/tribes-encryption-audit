@@ -44,7 +44,10 @@ export {
   hashPublicKeyJwk,
   storeSharedSecret,
   getSharedSecret,
+  getHistoricalSharedSecrets,
+  getAllSharedSecretsForBond,
   getAllSharedSecrets,
+  markSharedSecretHistorical,
   deleteSharedSecret,
   // Tribe key store (Phase 3)
   storeTribeKey,
