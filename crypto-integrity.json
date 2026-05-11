@@ -1,13 +1,13 @@
 {
-  "buildId": "a27b96f-1778516227",
-  "timestamp": "2026-05-11T16:21:17Z",
+  "buildId": "a27b96f-1778519981",
+  "timestamp": "2026-05-11T17:23:58Z",
   "sources": {
     "encoding.ts": "21cdfa0c5b9b5a23d5ae868170ee884d1be198fc7e2b7b3293f6e6868f874f37",
     "file-encryption.ts": "5be39dc743f305b447b70251a9b0460931a081c94840cd32f751350c01d49056",
     "identity-keys.ts": "9742bfc892c7bdcd75288e0c209fb70d315e3b7f290eca357a90b650a93b0d25",
     "index.ts": "55fb8d242955d281def6c7f8d980056b5499394c2b8141804b06e6082c9326f9",
     "journal-encryption.ts": "7d3e0fdfa3cf2115fbe907d46d46a730339e0f92ef2869e27559d3a678d97c89",
-    "key-manager.ts": "9a0bb55792abeff571cace0549e2a7eaa4b1fb9feb0d0ead3e9dd52d6a5c1d25",
+    "key-manager.ts": "5c8e84dda1fcf93ba083a48b5da0e93c4832c11ac46f0bc84faa384b61f2dfa3",
     "key-rotation.ts": "642cd14e17bbaeb76c35c09901aff7fbfbd6d6922334f6ca1ce9e6ca576978c0",
     "key-store.ts": "68ced19384f2b6d1409cc96dcfe9d3efb7497484228e0731ac1daa18e8d88816",
     "passkey-lifecycle.ts": "663d13eeaf89ae8f91b0d0cbee097741f6d1616315b638eaefdf355c0eba29b7",
@@ -15,6 +15,6 @@
     "prf-vault.ts": "d76b4418c3f5f1307f955902aab432e58f486087ee25abc229c3fdab2ccf1b71",
     "prf-webauthn-helpers.ts": "d482d8d382fb657e34c68e132a0f4ad1a69a2e89801b0e257cd8bd8f14c8f0da",
     "tribe-encryption.ts": "199af3cd01daf9a713ca6f400f4bf4c5069dc0d5d959dfbb5b6cd386dc065461",
-    "vault-backup.ts": "0991b9ef038d1adbb382bad566cd269f6094c1054b1b69f24d59c43bc2b97640"
+    "vault-backup.ts": "c799617caae7b9e27480dc2072a2f3057f0925ee1b847f879c7ff66689249f00"
   }
 }

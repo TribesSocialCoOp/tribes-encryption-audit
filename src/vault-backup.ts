@@ -340,22 +340,21 @@ export async function restoreVaultBackup(
         const localPubHash = await hashPublicKeyJwk(existingKey.publicKeyJwk);
         const backupPubHash = await hashPublicKeyJwk(entry.publicKeyJwk);
 
-        if (localPubHash === backupPubHash) {
-          // Same key pair — no action needed
+        if (localPubHash === backupPubHash && existingKey.privateKey.extractable) {
+          // Same key pair AND it's already extractable — no action needed
           skipped++;
           continue;
         }
 
-        // Different key pair — LOCAL WINS. This device generated its own key
-        // and published it to the server. The backup contains a key from a
-        // different device/session. Overwriting would cause a mismatch between
-        // this device's IndexedDB and the server's public key record.
+        // Different key pair OR local key is non-extractable (locked) — BACKUP WINS.
+        // If the user is explicitly performing a restore, they want the backup 
+        // to be the authority. Overwrite the mismatching or locked local key 
+        // with the one from the backup to bring this device into alignment.
         console.warn(
-          `[vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
-          `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
+          `[vault] Bond ${entry.bondId.substring(0, 16)}... ${localPubHash === backupPubHash ? 'is locked' : 'mismatch'} — ` +
+          `overwriting with backup`
         );
-        skipped++;
-        continue;
+        // Continue to import and store below
       }
 
       const privateKey = await importPrivateKey(entry.privateKeyJwk);
@@ -363,6 +362,16 @@ export async function restoreVaultBackup(
 
       // Persist to IndexedDB (new key or overwrite with backup's key)
       await storeBondKey(entry.bondId, privateKey, entry.publicKeyJwk);
+
+      // If we overwrote a different key, invalidate the cached shared secret.
+      // The next key-sync cycle will re-derive it with the correct key pair.
+      if (existingKey) {
+        try {
+          const { deleteSharedSecret } = await import('./key-store');
+          await deleteSharedSecret(entry.bondId);
+          console.debug(`[vault] Cleared stale shared secret for bond ${entry.bondId.substring(0, 16)}...`);
+        } catch { /* non-fatal */ }
+      }
     } catch (err) {
       console.warn(`[vault] Failed to restore key for bond ${entry.bondId}:`, err);
     }
